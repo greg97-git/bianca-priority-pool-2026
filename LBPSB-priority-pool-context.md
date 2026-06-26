@@ -133,6 +133,21 @@ When a new JOBLIST PDF is provided, here is how to identify eligible posts for B
 4. **Identify combos:** The most common pattern is bilingual posts where the 3403 English half and 3404 French half share the same base code (e.g., `1404` and `1404-FR`). Also look for same-school posts where 3403 is the largest.
 5. **Flag potential combos for verification:** If a combo looks possible but percentages need confirming, add a `ci` (combo investigate) note rather than asserting it as valid.
 
+### Field Extraction Rules
+
+**`grade` field:**
+- If the PDF shows "Other - Specify Under Description" → store `"See description"`
+- If the grade/cycle section is blank or missing → store `"Unknown"`
+- Otherwise → store verbatim as it appears in the PDF
+
+**`desc` field** — build as: `[Contract prefix]. [Program]. [Full verbatim PDF description paragraph].`
+- Contract prefix: `"Real year-round"` for E1/E2, `"Partial real"` for E3/E4, `"Replacement"` for E8
+- Program: the language program keyword from the post (e.g. Bilingual, French Plus, French Immersion, Regular French, etc.)
+- Full paragraph: paste the complete description text verbatim from the PDF — do not summarize or paraphrase. Preserve typos exactly as they appear.
+- If the post has no description paragraph, use just the contract prefix and program.
+
+**All other fields** (`code`, `cat`, `pct`, `ctype`, `school`, `location`, `start_time`, `s`, `e`, `cv`, `ci`, `ror`) — extract verbatim. Do not infer or guess missing values.
+
 ### School Name Aliases
 The job list and school info sheets sometimes use slightly different names. Common ones encountered:
 - "St. Charles" ↔ "St-Charles"
@@ -194,12 +209,16 @@ On load, the app merges saved state with the current JOBS array: saved order is 
 ```
 
 ### Update Workflow (When New Job List Arrives)
-1. User uploads the new JOBLIST PDF to Claude along with this context file
-2. Claude parses it and identifies all 3403 + 3404 posts, flags ROR, identifies combos
-3. Claude updates the `JOBS` array in `index.html` and the `COMBOS` array
-4. User saves the updated `index.html`, pushes to GitHub
-5. GitHub Pages redeploys in ~60 seconds
-6. Bianca's localStorage preference order is preserved; new jobs appear at the bottom
+1. User shares the new JOBLIST PDF (and this context file) with Claude in a new session
+2. Claude reads the PDF in chunks — max 20 pages per Read call, so 3 reads for a 44-page file. Read all pages before writing any code.
+3. Claude extracts all 3403 + 3404 posts using the **Field Extraction Rules** above, flags ROR, identifies combos
+4. Claude performs a **surgical diff** against the current `JOBS` array using `code` as the unique key:
+   - **New codes** (in PDF but not in current JOBS) → append at the bottom
+   - **Removed codes** (in current JOBS but absent from new PDF) → delete the entry
+   - **Changed fields** (same code, different values) → update only those fields; never reassign `code`
+5. User pushes updated `index.html` to GitHub
+6. GitHub Pages redeploys in ~60 seconds
+7. Bianca's localStorage preference order is preserved; new jobs appear at the bottom of her list
 
 ---
 
